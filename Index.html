@@ -7,6 +7,7 @@
     <title>PB Villa Gate Control (MQTT + BLE)</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
+        /* Your existing styles here, unchanged */
         * {
             box-sizing: border-box;
         }
@@ -125,6 +126,31 @@
         #reset-wifi:hover {
             background: #d68910;
         }
+
+        /* New Wi-Fi inputs styling */
+        #wifi-credentials {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        #wifi-credentials input {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            margin: 0.3rem 0;
+            font-size: 1rem;
+            border-radius: 8px;
+            border: 1.5px solid #ccc;
+            box-sizing: border-box;
+        }
+
+        #send-wifi-cred {
+            background-color: #27ae60;
+            box-shadow: 0 6px 12px rgba(39, 174, 96, 0.5);
+        }
+
+        #send-wifi-cred:hover:not(:disabled) {
+            background-color: #219150;
+        }
     </style>
 </head>
 
@@ -137,6 +163,14 @@
 
         <button id="reset-wifi">🔄 Reset Wi-Fi (AP Mode)</button>
         <div id="reset-status" class="status"></div>
+
+        <!-- New Wi-Fi Credentials Inputs -->
+        <div id="wifi-credentials">
+            <input type="text" id="wifi-ssid" placeholder="Wi-Fi SSID" autocomplete="off" />
+            <input type="password" id="wifi-pass" placeholder="Wi-Fi Password" autocomplete="off" />
+            <button id="send-wifi-cred" disabled>📶 Send Wi-Fi Credentials</button>
+            <div id="wifi-send-status" class="status"></div>
+        </div>
 
         <button id="mqtt-connect">☁ Connect Web</button>
         <div id="mqtt-status" class="status">MQTT Status: Disconnected</div>
@@ -162,17 +196,21 @@
         const bleConnectBtn = document.getElementById('ble-connect');
         const resetWifiBtn = document.getElementById('reset-wifi');
         const resetStatusDiv = document.getElementById('reset-status');
+        const wifiSsidInput = document.getElementById('wifi-ssid');
+        const wifiPassInput = document.getElementById('wifi-pass');
+        const sendWifiCredBtn = document.getElementById('send-wifi-cred');
+        const wifiSendStatusDiv = document.getElementById('wifi-send-status');
 
         const mqttBroker = 'wss://88f3ffb6c96244f88c492c358cfb13a4.s1.eu.hivemq.cloud:8884/mqtt';
         const mqttTopic = 'pb_villa/gate';
 
         function updateOpenGateButton() {
             openGateBtn.disabled = !(mqttConnected || bleConnected);
+            sendWifiCredBtn.disabled = !bleConnected; // Enable Wi-Fi send only if BLE connected
         }
 
         // BLE Connect
         bleConnectBtn.onclick = async () => {
-            // If already connected, disconnect
             if (bleConnected && bleDevice && bleDevice.gatt.connected) {
                 bleDevice.gatt.disconnect();
                 bleConnected = false;
@@ -184,7 +222,6 @@
                 return;
             }
 
-            // Otherwise, initiate connection
             bleConnectBtn.disabled = true;
             bleStatusDiv.textContent = 'Requesting BLE device...';
             bleStatusDiv.className = 'status';
@@ -227,7 +264,6 @@
                 bleConnectBtn.disabled = false;
             }
         };
-
 
         // MQTT Connect
         mqttConnectBtn.onclick = () => {
@@ -317,6 +353,8 @@
                 openGateStatusDiv.className = 'status error';
             }
         };
+
+        // RESET WIFI (AP MODE)
         resetWifiBtn.onclick = async () => {
             resetStatusDiv.textContent = '';
             resetStatusDiv.className = 'status';
@@ -338,6 +376,44 @@
                 console.error(err);
             }
         };
+
+        // SEND WIFI CREDENTIALS VIA BLE
+        sendWifiCredBtn.onclick = async () => {
+            wifiSendStatusDiv.textContent = '';
+            wifiSendStatusDiv.className = 'status';
+
+            if (!bleConnected || !bleCharacteristic) {
+                wifiSendStatusDiv.textContent = '❌ BLE not connected';
+                wifiSendStatusDiv.className = 'status error';
+                return;
+            }
+
+            const ssid = wifiSsidInput.value.trim();
+            const pass = wifiPassInput.value.trim();
+
+            if (!ssid || !pass) {
+                wifiSendStatusDiv.textContent = '❌ Please enter both SSID and Password';
+                wifiSendStatusDiv.className = 'status error';
+                return;
+            }
+
+            // Format Wi-Fi credentials command as "WIFI:<SSID>:<PASSWORD>"
+            const wifiCommand = `SETWIFI:${ssid}:${pass}`;
+
+            try {
+                const encoder = new TextEncoder();
+                await bleCharacteristic.writeValue(encoder.encode(wifiCommand));
+                wifiSendStatusDiv.textContent = '✅ Wi-Fi credentials sent';
+                wifiSendStatusDiv.className = 'status success';
+            } catch (err) {
+                wifiSendStatusDiv.textContent = '❌ Failed to send Wi-Fi credentials';
+                wifiSendStatusDiv.className = 'status error';
+                console.error(err);
+            }
+        };
+
+        // Update buttons status on BLE connect/disconnect
+        updateOpenGateButton();
     </script>
 </body>
 
